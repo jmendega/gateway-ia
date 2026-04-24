@@ -41,35 +41,40 @@ services:
 
   # ─────────────────────────────────────────────────────────────
   # Presidio Analyzer — detección de PII (tarjetas, emails, etc.)
+  # OPCIONAL: solo se levanta con: docker compose --profile pii up -d
+  # Imagen: mcr.microsoft.com/presidio/presidio-analyzer (tag fijo 2.2.354)
   # ─────────────────────────────────────────────────────────────
   presidio-analyzer:
-    image: mcr.microsoft.com/presidio/presidio-analyzer:latest
+    image: mcr.microsoft.com/presidio/presidio-analyzer:2.2.354
     container_name: ai-gateway-presidio-analyzer
+    profiles: ["pii"]
     restart: unless-stopped
     environment:
       - PORT=3000
     ports:
       - "5002:3000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 60s
 
   # ─────────────────────────────────────────────────────────────
   # Presidio Anonymizer — enmascarado de PII en respuestas
+  # OPCIONAL: solo se levanta con: docker compose --profile pii up -d
   # ─────────────────────────────────────────────────────────────
   presidio-anonymizer:
-    image: mcr.microsoft.com/presidio/presidio-anonymizer:latest
+    image: mcr.microsoft.com/presidio/presidio-anonymizer:2.2.354
     container_name: ai-gateway-presidio-anonymizer
+    profiles: ["pii"]
     restart: unless-stopped
     environment:
       - PORT=3000
     ports:
       - "5001:3000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5

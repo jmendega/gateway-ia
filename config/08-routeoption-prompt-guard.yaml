@@ -1,0 +1,38 @@
+# Prompt Guards: filtrado de contenido en solicitudes y respuestas.
+# Actúa ANTES de enviar el prompt al LLM (request) y DESPUÉS de recibir
+# la respuesta (response), sin modificar la lógica de la aplicación cliente.
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: RouteOption
+metadata:
+  name: ai-prompt-guard
+  namespace: ai-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: llm-route
+  options:
+    ai:
+      promptGuard:
+        request:
+          customResponseMessage: "Solicitud bloqueada por política de seguridad de datos."
+          regex:
+            action: REJECT
+            matches:
+              # Números de tarjeta de crédito (Visa, Mastercard, Amex, etc.)
+              - "(\\b\\d{4}[\\s\\-]?\\d{4}[\\s\\-]?\\d{4}[\\s\\-]?\\d{4}\\b)"
+              # Direcciones de email
+              - "([a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,})"
+              # Prompt injection clásico
+              - "(?i)(ignore\\s+(all\\s+|previous\\s+|prior\\s+)?(instructions?|prompts?|context))"
+              - "(?i)(jailbreak|DAN\\s+mode|developer\\s+mode|do\\s+anything\\s+now)"
+              # API keys / passwords expuestos en el prompt
+              - "(?i)(password|passwd|api[_\\-]?key|secret[_\\-]?key|token)\\s*[:=]\\s*\\S+"
+        response:
+          regex:
+            action: MASK
+            matches:
+              # Enmascarar números de tarjeta de crédito en la respuesta del LLM
+              - "(\\b\\d{4}[\\s\\-]?\\d{4}[\\s\\-]?\\d{4}[\\s\\-]?\\d{4}\\b)"
+              # Enmascarar emails generados por el LLM
+              - "([a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,})"

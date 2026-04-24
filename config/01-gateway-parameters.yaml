@@ -1,0 +1,14 @@
+# GatewayParameters: habilita la AI Extension en el plano de datos (Envoy).
+# Sin este recurso, los campos spec.ai.* en RouteOption y Backend no tienen efecto.
+# Debe existir ANTES de crear el Gateway que lo referencia.
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: GatewayParameters
+metadata:
+  name: ai-gateway-params
+  namespace: kgateway-system
+spec:
+  kube:
+    aiExtension:
+      enabled: true
+    service:
+      type: LoadBalancer

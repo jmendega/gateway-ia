@@ -1,0 +1,196 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# LiteLLM Proxy — Configuración del AI Gateway
+# NTT DATA | Practice Digital & Innovation | Spike Técnico 2026
+#
+# Proveedores configurados:
+#   1. OpenAI gpt-4o              — primario (de pago)
+#   2. Anthropic claude-3-5-sonnet — failover 1 (de pago)
+#   3. Groq llama-3.3-70b         — failover 2 (GRATUITO)
+#   4. Google Gemini 2.0 Flash    — failover 3 (GRATUITO)
+#   5. Ollama llama3.2            — failover 4 (GRATUITO, local)
+#
+# Cadena de failover: OpenAI → Anthropic → Groq → Gemini → Ollama
+#
+# Capacidades:
+#   • Rate limiting por tokens (virtual keys)
+#   • Cache semántico Redis (umbral 0.92)
+#   • Prompt Guards PII via Presidio
+#   • Observabilidad Prometheus
+# ─────────────────────────────────────────────────────────────────────────────
+
+model_list:
+
+  # ── 1. OpenAI gpt-4o — PRIMARIO ───────────────────────────────────────────
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+      timeout: 30
+      max_retries: 1
+      rpm: 100
+    model_info:
+      id: openai-gpt4o-primary
+
+  # ── 2. Anthropic Claude — FAILOVER 1 ──────────────────────────────────────
+  # Mismo alias "gpt-4o" + order:2 → failover transparente para el cliente
+  - model_name: gpt-4o
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+      timeout: 30
+      max_retries: 1
+      rpm: 100
+      order: 2
+    model_info:
+      id: anthropic-claude-failover
+
+  # ── 3. Groq llama-3.3-70b — FAILOVER 2 (GRATUITO) ────────────────────────
+  # Groq ofrece inferencia ultra-rápida con modelos open source.
+  # TTFT < 200ms — ideal para demostrar streaming.
+  # API key gratuita: https://console.groq.com
+  - model_name: gpt-4o
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
+      timeout: 30
+      max_retries: 1
+      rpm: 30                     # Tier gratuito: 30 RPM
+      order: 3
+    model_info:
+      id: groq-llama-failover
+
+  # ── 4. Google Gemini 2.0 Flash — FAILOVER 3 (GRATUITO) ───────────────────
+  # 15 RPM / 1M tokens por día en el tier gratuito de Google AI Studio.
+  # API key gratuita: https://ai.google.dev
+  - model_name: gpt-4o
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GEMINI_API_KEY
+      timeout: 30
+      max_retries: 1
+      rpm: 15                     # Tier gratuito: 15 RPM
+      order: 4
+    model_info:
+      id: gemini-flash-failover
+
+  # ── 5. Ollama llama3.2 — FAILOVER 4 (LOCAL, SIN INTERNET) ────────────────
+  # Ollama corre localmente. No requiere API key ni conexión a internet.
+  # Instalar Ollama: https://ollama.ai
+  # Descargar modelo: ollama pull llama3.2
+  # En Docker usa host.docker.internal para llegar al host.
+  - model_name: gpt-4o
+    litellm_params:
+      model: ollama/llama3.2
+      api_base: http://host.docker.internal:11434
+      timeout: 60                 # Modelos locales pueden ser más lentos
+      max_retries: 1
+      order: 5
+    model_info:
+      id: ollama-local-failover
+
+  # ── Acceso directo por nombre de proveedor ─────────────────────────────────
+  # Los clientes también pueden pedir un modelo específico por su nombre.
+
+  - model_name: claude-3-5-sonnet
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+      timeout: 30
+    model_info:
+      id: anthropic-claude-direct
+
+  - model_name: llama-3.3-70b
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
+      timeout: 30
+    model_info:
+      id: groq-llama-direct
+
+  - model_name: gemini-flash
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GEMINI_API_KEY
+      timeout: 30
+    model_info:
+      id: gemini-flash-direct
+
+  - model_name: llama-local
+    litellm_params:
+      model: ollama/llama3.2
+      api_base: http://host.docker.internal:11434
+      timeout: 60
+    model_info:
+      id: ollama-direct
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Router: estrategia de routing y cadena de failover
+# ─────────────────────────────────────────────────────────────────────────────
+router_settings:
+  # Cadena de failover completa: OpenAI → Anthropic → Groq → Gemini → Ollama
+  fallbacks:
+    - gpt-4o:
+        - claude-3-5-sonnet
+        - llama-3.3-70b
+        - gemini-flash
+        - llama-local
+    - claude-3-5-sonnet:
+        - llama-3.3-70b
+        - gemini-flash
+        - llama-local
+    - llama-3.3-70b:
+        - gemini-flash
+        - llama-local
+
+  allowed_fails: 1
+  num_retries: 2
+  timeout: 30
+  routing_strategy: usage-based-routing
+  enable_pre_call_checks: true
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LiteLLM Settings: cache, rate limit, guardrails, observabilidad
+# ─────────────────────────────────────────────────────────────────────────────
+litellm_settings:
+
+  # ── Cache semántico con Redis ──────────────────────────────────────────────
+  cache: true
+  cache_params:
+    type: redis
+    host: os.environ/REDIS_HOST
+    port: 6379
+    password: os.environ/REDIS_PASSWORD
+    ttl: 3600
+
+  semantic_cache_embedding_model: text-embedding-3-small
+  semantic_cache_similarity_threshold: 0.92
+
+  # ── Rate limiting global ───────────────────────────────────────────────────
+  tpm_limit: 100000
+  rpm_limit: 200
+
+  # ── Prompt Guards — PII via Presidio ──────────────────────────────────────
+  guardrails:
+    - guardrail_name: presidio-pii-masking
+      litellm_params:
+        guardrail: presidio
+        mode: pre_call
+        default_on: true
+
+  # ── Observabilidad Prometheus ──────────────────────────────────────────────
+  success_callback: [prometheus]
+  failure_callback: [prometheus]
+  json_logs: true
+  log_raw_request_response: false
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# General Settings
+# ─────────────────────────────────────────────────────────────────────────────
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: true
+  ui_access_mode: all

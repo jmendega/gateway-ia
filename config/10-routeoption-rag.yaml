@@ -1,0 +1,88 @@
+# RAG (Retrieval Augmented Generation) en el gateway.
+# El gateway intercepta cada solicitud, vectoriza el prompt, recupera los
+# fragmentos más relevantes de PostgreSQL+pgvector y enriquece el prompt
+# con ese contexto ANTES de enviarlo al LLM.
+# Ventaja vs RAG en la app: transparente para todos los clientes.
+#
+# DEPENDENCIA: Requiere PostgreSQL con extensión pgvector.
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: RouteOption
+metadata:
+  name: ai-rag
+  namespace: ai-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: llm-route
+  options:
+    ai:
+      rag:
+        embeddingProvider:
+          openai:
+            model: "text-embedding-3-small"
+            authToken:
+              secretRef:
+                name: openai-api-key
+                namespace: ai-gateway
+                key: apiKey
+        datastore:
+          postgres:
+            connectionString: "postgresql://rag_user:rag_password@postgres-rag.ai-gateway.svc.cluster.local:5432/rag_db"
+            collectionName: "knowledge_base"
+        topK: 5
+        systemPromptTemplate: |
+          Eres un asistente especializado de NTT DATA. Usa el siguiente contexto
+          recuperado de la base de conocimiento corporativa para responder con precisión.
+          Si la información no está en el contexto, indícalo claramente en lugar de inventar.
+
+          Contexto recuperado:
+          {{ .Context }}
+---
+# PostgreSQL con pgvector para búsqueda vectorial.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-rag
+  namespace: ai-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-rag
+  template:
+    metadata:
+      labels:
+        app: postgres-rag
+    spec:
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg16
+          env:
+            - name: POSTGRES_DB
+              value: "rag_db"
+            - name: POSTGRES_USER
+              value: "rag_user"
+            - name: POSTGRES_PASSWORD
+              value: "rag_password"
+          ports:
+            - containerPort: 5432
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-rag
+  namespace: ai-gateway
+spec:
+  selector:
+    app: postgres-rag
+  ports:
+    - port: 5432
+      targetPort: 5432

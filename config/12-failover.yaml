@@ -1,0 +1,47 @@
+# Failover automático entre proveedores LLM.
+# Si OpenAI responde con 429 (rate limit), 5xx o supera el timeout,
+# el gateway reintenta automáticamente con Anthropic sin que el cliente
+# necesite implementar lógica de retry.
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: RouteOption
+metadata:
+  name: ai-failover
+  namespace: ai-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: llm-route
+  options:
+    ai:
+      llmProviderPool:
+        # Proveedor primario: OpenAI gpt-4o
+        - provider:
+            openai:
+              model: "gpt-4o"
+              authToken:
+                secretRef:
+                  name: openai-api-key
+                  namespace: ai-gateway
+                  key: apiKey
+          priority: 1
+          failoverConditions:
+            - statusCodes: [429, 500, 502, 503, 504]
+            - timeout: "30s"
+        # Failover: Anthropic Claude (modelo alternativo de alta calidad)
+        - provider:
+            anthropic:
+              model: "claude-3-5-sonnet-20241022"
+              authToken:
+                secretRef:
+                  name: anthropic-api-key
+                  namespace: ai-gateway
+                  key: apiKey
+          priority: 2
+          failoverConditions:
+            - statusCodes: [429, 500, 502, 503, 504]
+            - timeout: "30s"
+    retryPolicy:
+      numRetries: 2
+      retryOn: "5xx,reset,retriable-4xx"
+      perTryTimeout: "25s"

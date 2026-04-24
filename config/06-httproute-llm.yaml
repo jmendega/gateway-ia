@@ -1,0 +1,45 @@
+# HTTPRoute: define las reglas de enrutamiento hacia los backends LLM.
+# Estrategia:
+#   - Header x-llm-provider=openai   → OpenAI (100%)
+#   - Header x-llm-provider=anthropic → Anthropic (100%)
+#   - Sin header (ruta default)       → OpenAI 80% / Anthropic 20% (A/B split)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: llm-route
+  namespace: ai-gateway
+spec:
+  parentRefs:
+    - name: ai-gateway
+      namespace: ai-gateway
+  rules:
+    # Ruta explícita a OpenAI
+    - matches:
+        - headers:
+            - name: "x-llm-provider"
+              value: "openai"
+      backendRefs:
+        - name: openai-backend
+          port: 443
+          weight: 100
+    # Ruta explícita a Anthropic
+    - matches:
+        - headers:
+            - name: "x-llm-provider"
+              value: "anthropic"
+      backendRefs:
+        - name: anthropic-backend
+          port: 443
+          weight: 100
+    # Ruta default con traffic splitting 80/20
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/v1/chat/completions"
+      backendRefs:
+        - name: openai-backend
+          port: 443
+          weight: 80
+        - name: anthropic-backend
+          port: 443
+          weight: 20

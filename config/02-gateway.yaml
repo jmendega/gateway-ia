@@ -1,0 +1,18 @@
+# Gateway principal. La annotation gateway.kgateway.dev/gateway-parameters-name
+# vincula este Gateway con el GatewayParameters que habilita la AI Extension.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ai-gateway
+  namespace: ai-gateway
+  annotations:
+    gateway.kgateway.dev/gateway-parameters-name: "ai-gateway-params"
+spec:
+  gatewayClassName: kgateway
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same

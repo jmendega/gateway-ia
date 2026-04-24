@@ -1,0 +1,77 @@
+# Cache semántico: evita llamadas redundantes al LLM para prompts similares.
+# Usa embeddings vectoriales para comparar el prompt entrante con respuestas
+# ya cacheadas. Si la similitud supera el umbral, retorna la respuesta cacheada
+# en milisegundos sin consumir tokens ni incurrir en costo.
+#
+# DEPENDENCIA: Requiere Redis Stack (no Redis OSS) por el módulo RediSearch.
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: RouteOption
+metadata:
+  name: ai-semantic-cache
+  namespace: ai-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: llm-route
+  options:
+    ai:
+      semanticCache:
+        datastore:
+          redis:
+            connectionInfo:
+              host: redis-cache.ai-gateway.svc.cluster.local
+              port: 6379
+        embeddingProvider:
+          openai:
+            model: "text-embedding-3-small"
+            authToken:
+              secretRef:
+                name: openai-api-key
+                namespace: ai-gateway
+                key: apiKey
+        # 0.92 = alta precisión semántica. Bajar a 0.85 para más cache hits.
+        scoreThreshold: 0.92
+        # TTL en segundos (1 hora)
+        ttl: 3600
+---
+# Redis Stack — incluye el módulo RediSearch necesario para búsqueda vectorial.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-cache
+  namespace: ai-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-cache
+  template:
+    metadata:
+      labels:
+        app: redis-cache
+    spec:
+      containers:
+        - name: redis
+          image: redis/redis-stack:7.2.0-v9
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cache
+  namespace: ai-gateway
+spec:
+  selector:
+    app: redis-cache
+  ports:
+    - port: 6379
+      targetPort: 6379

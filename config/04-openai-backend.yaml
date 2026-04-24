@@ -1,0 +1,32 @@
+# Backend para OpenAI — proveedor primario del spike.
+# El campo spec.ai.llm activa el procesamiento específico de LLM en el proxy Envoy.
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: Backend
+metadata:
+  name: openai-backend
+  namespace: ai-gateway
+spec:
+  ai:
+    llm:
+      provider:
+        openai:
+          model: "gpt-4o"
+          authToken:
+            secretRef:
+              name: openai-api-key
+              namespace: ai-gateway
+              key: apiKey
+---
+# Service ExternalName que apunta al endpoint de OpenAI.
+# Envoy lo resuelve como un cluster upstream externo.
+apiVersion: v1
+kind: Service
+metadata:
+  name: openai-backend
+  namespace: ai-gateway
+spec:
+  type: ExternalName
+  externalName: api.openai.com
+  ports:
+    - port: 443
+      protocol: TCP

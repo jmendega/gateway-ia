@@ -1,0 +1,40 @@
+# Rate limiting basado en tokens — protección denial-of-wallet.
+# A diferencia del rate limiting tradicional (por requests), este controla
+# el consumo real de tokens LLM (input + output) por usuario y globalmente.
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: RouteOption
+metadata:
+  name: ai-ratelimit
+  namespace: ai-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: llm-route
+  options:
+    rateLimit:
+      local:
+        tokenBuckets:
+          # Límite global: 100,000 tokens por minuto en toda la ruta
+          - tokenBucket:
+              tokensPerFill: 100000
+              fillInterval: "60s"
+              maxTokens: 100000
+      descriptors:
+        # 100 requests/minuto por usuario (header x-user-id)
+        - key: "x-user-id"
+          rateLimit:
+            requestsPerUnit: 100
+            unit: MINUTE
+        # 50,000 tokens de entrada por hora por usuario
+        - key: "x-user-id"
+          rateLimit:
+            requestsPerUnit: 50000
+            unit: HOUR
+            type: INPUT_TOKENS
+        # 50,000 tokens de salida por hora por usuario
+        - key: "x-user-id"
+          rateLimit:
+            requestsPerUnit: 50000
+            unit: HOUR
+            type: OUTPUT_TOKENS

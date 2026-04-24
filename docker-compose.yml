@@ -102,7 +102,7 @@ services:
       PRESIDIO_ANONYMIZER_API_BASE: http://presidio-anonymizer:3000
     volumes:
       - ./litellm/config.yaml:/app/config.yaml
-    command: ["litellm", "--config", "/app/config.yaml", "--port", "4000", "--num_workers", "2"]
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "2"]
     depends_on:
       postgres:
         condition: service_healthy

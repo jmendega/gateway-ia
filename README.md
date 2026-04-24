@@ -38,17 +38,19 @@ cd C:\NTTDATA\PDI\gateway-ia
 
 # 2. Crear el archivo de variables de entorno
 cp litellm/.env.example .env
-# Editar .env con las API keys reales (OPENAI_API_KEY y ANTHROPIC_API_KEY)
+# Editar .env con al menos UNA API key (ver tabla de proveedores abajo)
+# Opción gratuita: GROQ_API_KEY — obtener en https://console.groq.com (sin tarjeta)
 
-# 3. Crear el archivo prometheus.yml como archivo (obligatorio)
-# Ya existe en el repositorio — no modificar
-
-# 4. Levantar el stack completo
+# 3. Levantar el stack principal (sin Presidio)
 docker compose up -d
 
-# 5. Verificar que todos los servicios estén healthy (~60s)
+# 4. Verificar que todos los servicios estén healthy (~60s)
 docker compose ps
 ```
+
+> **Nota sobre Presidio (Prompt Guard PII):** Los servicios de detección de PII son opcionales
+> y se levantan por separado para evitar errores de imagen al arranque inicial.
+> Ver sección "Prueba 4 — Prompt Guard" más abajo.
 
 ### Servicios disponibles
 
@@ -89,12 +91,20 @@ curl -X POST http://localhost:4000/chat/completions \
 
 #### 4. Prompt Guard — enmascarado de PII
 ```bash
-# Esperar ~30s a que Presidio esté healthy antes de esta prueba
+# Paso 1: Levantar Presidio (perfil separado, imagen ~500 MB, tarda ~60s)
+docker compose --profile pii up -d
+docker compose ps   # Esperar a que presidio-analyzer esté (healthy)
+
+# Paso 2: Activar el guardrail en la petición con el header guardrails
 curl -X POST http://localhost:4000/chat/completions \
   -H "Authorization: Bearer $USER_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4o","messages":[{"role":"user","content":"Mi tarjeta es 4111-1111-1111-1111 ayudame"}]}'
-# El número de tarjeta se enmascara antes de llegar a OpenAI
+  -d '{
+    "model": "gpt-4o",
+    "guardrails": ["presidio-pii-masking"],
+    "messages": [{"role":"user","content":"Mi tarjeta es 4111-1111-1111-1111 ayudame"}]
+  }'
+# El número de tarjeta se enmascara antes de llegar al LLM: <CREDIT_CARD>
 ```
 
 #### 5. Cache semántico

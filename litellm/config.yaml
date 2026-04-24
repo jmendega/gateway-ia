@@ -177,7 +177,7 @@ litellm_settings:
       litellm_params:
         guardrail: presidio
         mode: pre_call
-        default_on: true
+        default_on: false   # Activar solo cuando Presidio esté corriendo (--profile pii)
 
   # ── Observabilidad Prometheus ──────────────────────────────────────────────
   success_callback: [prometheus]

@@ -1,0 +1,11 @@
+# Secrets — nunca commitear
+.env
+*.local.yaml
+config/03-secrets.local.yaml
+
+# Temporales Office
+docs/~$*
+
+# OS
+.DS_Store
+Thumbs.db

@@ -91,10 +91,13 @@ Copiar litellm/.env.example → .env y rellenar:
 
 ## Errores conocidos y soluciones aplicadas
 
-1. Presidio latest tag no disponible en MCR → usar tag fijo :2.2.354 + perfil opcional "pii"
+1. Presidio latest tag no disponible en MCR → imágenes completamente removidas de MCR, no hay tag disponible
 2. litellm command duplicado ("litellm litellm ...") → el entrypoint de la imagen ya es litellm, solo pasar args
 3. start_period muy corto (20s) → aumentado a 60s para dar tiempo a conexion con Postgres
 4. Prometheus depends_on litellm → eliminado para evitar fallo en cascada
+5. Guardrails rotos en litellm:main-latest (v1.82.6+) → `guardrails` dentro de `litellm_settings` usa API v1 (rota). Usar SIEMPRE formato lista al nivel raíz del YAML (API v2). Ver config.yaml sección "guardrails:"
+6. Presidio reemplazado por `hide-secrets` (built-in LiteLLM, sin Docker adicional) — detecta API keys y tokens
+7. Healthcheck: imagen nueva no tiene `curl` → usar `python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')"`
 
 ## Documentos generados
 

@@ -48,9 +48,9 @@ docker compose up -d
 docker compose ps
 ```
 
-> **Nota sobre Presidio (Prompt Guard PII):** Los servicios de detección de PII son opcionales
-> y se levantan por separado para evitar errores de imagen al arranque inicial.
-> Ver sección "Prueba 4 — Prompt Guard" más abajo.
+> **Nota sobre Prompt Guard PII:** El guardrail `hide-secrets` está integrado en LiteLLM
+> y se activa automáticamente al levantar el stack principal. No requiere servicios adicionales.
+> Las imágenes de Presidio fueron removidas de MCR y ya no están disponibles.
 
 ### Servicios disponibles
 
@@ -89,23 +89,30 @@ curl -X POST http://localhost:4000/chat/completions \
 # Headers de respuesta: x-ratelimit-remaining-tokens, x-ratelimit-limit-tokens
 ```
 
-#### 4. Prompt Guard — enmascarado de PII
-```bash
-# Paso 1: Levantar Presidio (perfil separado, imagen ~500 MB, tarda ~60s)
-docker compose --profile pii up -d
-docker compose ps   # Esperar a que presidio-analyzer esté (healthy)
+#### 4. Prompt Guard — ocultado de secrets (hide-secrets, built-in)
 
-# Paso 2: Activar el guardrail en la petición con el header guardrails
+El guardrail `hide-secrets` está activo por default (`default_on: true`) desde el arranque.
+Detecta y redacta API keys, tokens y secrets antes de enviar al LLM.
+
+```bash
+# El guardrail se aplica automáticamente. Para verificar que está activo:
+curl http://localhost:4000/guardrails/list \
+  -H "Authorization: Bearer sk-spike-nttdata-2026"
+# Debe mostrar: "guardrail_name": "hide-secrets-guard", "default_on": true
+
+# Prueba: enviar una petición con un secret — debe ser redactado en los logs
 curl -X POST http://localhost:4000/chat/completions \
   -H "Authorization: Bearer $USER_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4o",
-    "guardrails": ["presidio-pii-masking"],
-    "messages": [{"role":"user","content":"Mi tarjeta es 4111-1111-1111-1111 ayudame"}]
+    "messages": [{"role":"user","content":"Mi API key es sk-abc123xyz456 ayudame"}]
   }'
-# El número de tarjeta se enmascara antes de llegar al LLM: <CREDIT_CARD>
+# El secret es redactado antes de llegar al LLM
 ```
+
+> **Nota:** Presidio (detección de PII como tarjetas, emails, DNI) fue removido porque
+> Microsoft eliminó sus imágenes de MCR. `hide-secrets` cubre secrets/API keys sin Docker adicional.
 
 #### 5. Cache semántico
 ```bash
@@ -127,8 +134,8 @@ curl -i -X POST http://localhost:4000/chat/completions \
 #### 6. Failover automático
 ```bash
 # Simular falla de OpenAI: editar .env con OPENAI_API_KEY=invalid
-# Reiniciar solo el servicio LiteLLM:
-docker compose restart litellm
+# Recrear el servicio LiteLLM (restart no recarga la config del compose):
+docker compose up -d litellm
 
 # La solicitud debe resolverse con Anthropic
 curl -X POST http://localhost:4000/chat/completions \

@@ -171,19 +171,22 @@ litellm_settings:
   tpm_limit: 100000
   rpm_limit: 200
 
-  # ── Prompt Guards — PII via Presidio ──────────────────────────────────────
-  guardrails:
-    - guardrail_name: presidio-pii-masking
-      litellm_params:
-        guardrail: presidio
-        mode: pre_call
-        default_on: false   # Activar solo cuando Presidio esté corriendo (--profile pii)
-
   # ── Observabilidad Prometheus ──────────────────────────────────────────────
   success_callback: [prometheus]
   failure_callback: [prometheus]
   json_logs: true
   log_raw_request_response: false
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Guardrails — formato lista nivel raíz (v2), NO dentro de litellm_settings
+# ─────────────────────────────────────────────────────────────────────────────
+guardrails:
+  - guardrail_name: hide-secrets-guard
+    litellm_params:
+      guardrail: hide-secrets
+      mode: pre_call
+      default_on: true
 
 
 # ─────────────────────────────────────────────────────────────────────────────
